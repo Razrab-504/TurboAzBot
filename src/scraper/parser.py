@@ -1,14 +1,18 @@
 import asyncio
 import aiohttp
+import random
+import logging
 from bs4 import BeautifulSoup
 
 from src.db.session import Local_Session
 from src.db.crud.advertisement_crud import get_ad_by_id, create_ad
 from src.db.crud.sent_ad_crud import is_ad_sent_to_user, create_sent_ad
+from src.db.crud.user_crud import update_user
 from src.db.models import User
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from aiogram import Bot
+import datetime
 
 async def parse_page(url: str) -> list:
     headers = {
@@ -57,7 +61,27 @@ async def parse_page(url: str) -> list:
 
     return ads
 
+async def notify_admins(bot: Bot, message: str):
+    async with Local_Session() as session:
+        result = await session.execute(select(User).where(User.role == "admin"))
+        admins = result.scalars().all()
+        for admin in admins:
+            try:
+                await bot.send_message(admin.id, f"⚠️ {message}")
+            except Exception:
+                pass
+
+async def check_expired_subscriptions():
+    async with Local_Session() as session:
+        now = datetime.datetime.utcnow()
+        result = await session.execute(select(User).where(User.subscription == True).where(User.expiry_date.isnot(None)).where(User.expiry_date < now))
+        expired_users = result.scalars().all()
+        for user in expired_users:
+            await update_user(session, user.id, subscription=False)
+            logging.info(f"Подписка истекла для пользователя {user.id}")
+
 async def parse_user_filters(bot: Bot):
+    await check_expired_subscriptions()
     async with Local_Session() as session:
         result = await session.execute(select(User).options(joinedload(User.filters)).where(User.subscription == True))
         users = result.scalars().unique().all()
@@ -65,8 +89,14 @@ async def parse_user_filters(bot: Bot):
         for user in users:
             for filter_ in user.filters:
                 url = filter_.query_url
-                ads = await parse_page(url)
-                await asyncio.sleep(1)
+                try:
+                    ads = await parse_page(url)
+                except Exception as e:
+                    logging.error(f"Ошибка парсинга для фильтра {filter_.id}: {e}")
+                    await notify_admins(bot, f"Ошибка парсинга фильтра {filter_.id}: {str(e)}")
+                    continue
+                delay = random.uniform(3, 7)
+                await asyncio.sleep(delay)
 
                 parts = filter_.label.split()
                 make = parts[0].lower() if len(parts) > 0 else ''
@@ -109,4 +139,5 @@ async def parse_user_filters(bot: Bot):
 async def start_parsing_loop(bot: Bot):
     while True:
         await parse_user_filters(bot)
-        await asyncio.sleep(30)
+        delay = random.uniform(300, 600)
+        await asyncio.sleep(delay)

@@ -376,43 +376,55 @@ async def process_model(message: Message, state: FSMContext, user):
 
 @user_router.message(FilterStates.waiting_for_min_price)
 async def process_min_price(message: Message, state: FSMContext, user):
-    await state.update_data(min_price=message.text)
-    await state.set_state(FilterStates.waiting_for_max_price)
-    await message.reply(texts[user.language]["max_price"])
+    try:
+        price = int(message.text)
+        if price < 0:
+            raise ValueError
+        await state.update_data(min_price=str(price))
+        await state.set_state(FilterStates.waiting_for_max_price)
+        await message.reply(texts[user.language]["max_price"])
+    except ValueError:
+        await message.reply("Введите корректную цену (целое положительное число)")
 
 @user_router.message(FilterStates.waiting_for_max_price)
 async def process_max_price(message: Message, state: FSMContext, user):
-    await state.update_data(max_price=message.text)
-    data = await state.get_data()
-    user_id = message.from_user.id
-    make_name = data['make']
-    model_name = data['model']
-    make_id = get_make_id(make_name)
-    model_id = get_model_id(make_id, model_name) if make_id else None
-    min_p = data['min_price']
-    max_p = data['max_price']
-    url = f"https://turbo.az/autos?q[currency]=azn&q[price_from]={min_p}&q[price_to]={max_p}"
-    if make_id:
-        url += f"&q[make][]={make_id}"
-    if model_id:
-        url += f"&q[model][]={model_id}"
-    label = f"{data['make']} {data['model']} {min_p}-{max_p}"
+    try:
+        price = int(message.text)
+        if price < 0:
+            raise ValueError
+        await state.update_data(max_price=str(price))
+        data = await state.get_data()
+        user_id = message.from_user.id
+        make_name = data['make']
+        model_name = data['model']
+        make_id = get_make_id(make_name)
+        model_id = get_model_id(make_id, model_name) if make_id else None
+        min_p = data['min_price']
+        max_p = data['max_price']
+        url = f"https://turbo.az/autos?q[currency]=azn&q[price_from]={min_p}&q[price_to]={max_p}"
+        if make_id:
+            url += f"&q[make][]={make_id}"
+        if model_id:
+            url += f"&q[model][]={model_id}"
+        label = f"{data['make']} {data['model']} {min_p}-{max_p}"
 
-    async with Local_Session() as session:
-        filter_obj = SearchFilter(user_id=user_id, query_url=url, label=label)
-        session.add(filter_obj)
-        await session.commit()
-        from src.db.session import Local_Session as LS
-        async with LS() as sess:
-            await update_user(sess, user_id, subscription=True)
+        async with Local_Session() as session:
+            filter_obj = SearchFilter(user_id=user_id, query_url=url, label=label)
+            session.add(filter_obj)
+            await session.commit()
+            from src.db.session import Local_Session as LS
+            async with LS() as sess:
+                await update_user(sess, user_id, subscription=True)
 
-    await state.clear()
-    keyboard = get_user_keyboard(user.language)
+        await state.clear()
+        keyboard = get_user_keyboard(user.language)
 
-    if user.language == "ru":
-        filter_msg = f"Теперь вам будут приходить предложения по фильтру: {label} AZN"
-    else:
-        filter_msg = f"İndi sizə filtr üzrə təkliflər gələcək: {label} AZN"
+        if user.language == "ru":
+            filter_msg = f"Теперь вам будут приходить предложения по фильтру: {label} AZN"
+        else:
+            filter_msg = f"İndi sizə filtr üzrə təkliflər gələcək: {label} AZN"
 
-    await message.reply(texts[user.language]["filter_saved"] + "\n\n" + filter_msg, reply_markup=keyboard)
+        await message.reply(texts[user.language]["filter_saved"] + "\n\n" + filter_msg, reply_markup=keyboard)
+    except ValueError:
+        await message.reply("Введите корректную цену (целое положительное число)")
 

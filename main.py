@@ -3,11 +3,14 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv, find_dotenv
 import os
 import asyncio
+import logging
 
 from src.bot.handlers.user import user_router
 from src.bot.handlers.admin import admin_router
 from src.bot.middlewares.language_middleware import LanguageMiddleware
 from src.scraper.parser import start_parsing_loop
+
+logging.basicConfig(level=logging.INFO)
 
 load_dotenv(find_dotenv())
 

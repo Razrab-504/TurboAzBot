@@ -1,12 +1,11 @@
 from aiogram.filters import BaseFilter
 from aiogram.types import Message, CallbackQuery
-from dotenv import load_dotenv, find_dotenv
-import os
-
-load_dotenv(find_dotenv())
-
-ADMIN_ID = int(os.getenv("ADMIN_ID"))
+from src.db.session import Local_Session
+from src.db.crud.user_crud import get_user
 
 class IsAdmin(BaseFilter):
     async def __call__(self, events: Message | CallbackQuery) -> bool:
-        return events.from_user.id == ADMIN_ID
+        user_id = events.from_user.id
+        async with Local_Session() as session:
+            user = await get_user(session, user_id)
+            return user and user.role == "admin"

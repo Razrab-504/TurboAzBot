@@ -106,6 +106,29 @@ async def revoke_sub(message: Message):
             await update_user(sess, target_id, subscription=False)
     await message.reply(texts["ru"]["sub_revoked"].format(user_id=target_id))
 
+@admin_router.message(Command("stats"))
+async def stats(message: Message):
+    user_id = message.from_user.id
+    async with Local_Session() as session:
+        admin = await get_user(session, user_id)
+        if not admin or admin.role != "admin":
+            lang = admin.language if admin else "ru"
+            await message.reply(texts[lang]["not_admin"])
+            return
+        from sqlalchemy import func
+        users_count = await session.execute(select(func.count(User.id)).where(User.subscription == True))
+        users_count = users_count.scalar()
+        from src.db.models.searchfilter import SearchFilter
+        filters_count = await session.execute(select(func.count(SearchFilter.id)))
+        filters_count = filters_count.scalar()
+        from src.db.models.advertisement import Advertisement
+        ads_count = await session.execute(select(func.count(Advertisement.id)))
+        ads_count = ads_count.scalar()
+        from src.db.models.sent_ad import SentAd
+        sent_count = await session.execute(select(func.count(SentAd.id)))
+        sent_count = sent_count.scalar()
+    await message.reply(f"Статистика:\nАктивных пользователей: {users_count}\nФильтров: {filters_count}\nОбъявлений в кэше: {ads_count}\nОтправленных уведомлений: {sent_count}")
+
 @admin_router.message(F.text == "Рассылка сообщений")
 async def broadcast_ru(message: Message):
     await message.reply("Используйте команду /broadcast <сообщение> для рассылки подписчикам.")
