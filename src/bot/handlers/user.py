@@ -301,6 +301,21 @@ async def start_filter(message: Message, state: FSMContext, user):
     if not user.subscription:
         await message.reply(texts[user.language]["subscription_required"])
         return
+    
+    async with Local_Session() as session:
+        result = await session.execute(
+            select(SearchFilter).where(SearchFilter.user_id == user.id)
+        )
+        filters_count = len(result.scalars().all())
+        
+        MAX_FILTERS = 10
+        if filters_count >= MAX_FILTERS:
+            await message.reply(
+                f"Вы достигли максимального количества фильтров ({MAX_FILTERS}). "
+                "Удалите старые фильтры, чтобы создать новые."
+            )
+            return
+    
     await state.set_state(FilterStates.waiting_for_make)
     await message.reply(texts[user.language]["filter_start"])
 
@@ -379,7 +394,11 @@ async def process_min_price(message: Message, state: FSMContext, user):
     try:
         price = int(message.text)
         if price < 0:
-            raise ValueError
+            await message.reply("Цена не может быть отрицательной")
+            return
+        if price > 10_000_000:
+            await message.reply("Цена слишком большая")
+            return
         await state.update_data(min_price=str(price))
         await state.set_state(FilterStates.waiting_for_max_price)
         await message.reply(texts[user.language]["max_price"])
@@ -391,9 +410,19 @@ async def process_max_price(message: Message, state: FSMContext, user):
     try:
         price = int(message.text)
         if price < 0:
-            raise ValueError
-        await state.update_data(max_price=str(price))
+            await message.reply("Цена не может быть отрицательной")
+            return
+        
         data = await state.get_data()
+        min_price = int(data['min_price'])
+        
+        if price < min_price:
+            await message.reply(
+                f"Максимальная цена не может быть меньше минимальной. Минимальная цена: {min_price} AZN"
+            )
+            return
+        
+        await state.update_data(max_price=str(price))
         user_id = message.from_user.id
         make_name = data['make']
         model_name = data['model']

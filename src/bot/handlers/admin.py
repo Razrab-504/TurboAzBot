@@ -3,6 +3,7 @@ from aiogram.types import Message
 from aiogram.filters import Command
 from src.bot.filters.admin_filter import IsAdmin
 import asyncio
+import datetime
 
 from src.db.session import Local_Session
 from src.db.crud.user_crud import get_user, update_user
@@ -128,6 +129,36 @@ async def stats(message: Message):
         sent_count = await session.execute(select(func.count(SentAd.id)))
         sent_count = sent_count.scalar()
     await message.reply(f"Статистика:\nАктивных пользователей: {users_count}\nФильтров: {filters_count}\nОбъявлений в кэше: {ads_count}\nОтправленных уведомлений: {sent_count}")
+
+@admin_router.message(Command("grant_trial"))
+async def grant_trial(message: Message):
+    args = message.text.split()
+    if len(args) < 2:
+        await message.reply("Использование: /grant_trial <user_id> <days>")
+        return
+    
+    target_id = int(args[1])
+    days = int(args[2]) if len(args) > 2 else 7
+    
+    async with Local_Session() as session:
+        user = await get_user(session, target_id)
+        if not user:
+            await message.reply(f"Пользователь {target_id} не найден")
+            return
+        if user.is_trial_used:
+            await message.reply(f"Пользователь {target_id} уже использовал триальный период")
+            return
+        
+        expiry = datetime.datetime.utcnow() + datetime.timedelta(days=days)
+        await update_user(
+            session, 
+            target_id, 
+            subscription=True, 
+            expiry_date=expiry,
+            is_trial_used=True
+        )
+    
+    await message.reply(f"Триальный период на {days} дней выдан пользователю {target_id}")
 
 @admin_router.message(F.text == "Рассылка сообщений")
 async def broadcast_ru(message: Message):

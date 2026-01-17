@@ -68,8 +68,8 @@ async def notify_admins(bot: Bot, message: str):
         for admin in admins:
             try:
                 await bot.send_message(admin.id, f"⚠️ {message}")
-            except Exception:
-                pass
+            except Exception as e:
+                logging.error(f"Не удалось отправить уведомление админу {admin.id}: {e}")
 
 async def check_expired_subscriptions():
     async with Local_Session() as session:
@@ -82,26 +82,31 @@ async def check_expired_subscriptions():
 
 async def parse_user_filters(bot: Bot):
     await check_expired_subscriptions()
+    
     async with Local_Session() as session:
         result = await session.execute(select(User).options(joinedload(User.filters)).where(User.subscription == True))
         users = result.scalars().unique().all()
-
+        
+        url_to_users = {}
         for user in users:
             for filter_ in user.filters:
-                url = filter_.query_url
-                try:
-                    ads = await parse_page(url)
-                except Exception as e:
-                    logging.error(f"Ошибка парсинга для фильтра {filter_.id}: {e}")
-                    await notify_admins(bot, f"Ошибка парсинга фильтра {filter_.id}: {str(e)}")
-                    continue
-                delay = random.uniform(3, 7)
-                await asyncio.sleep(delay)
-
+                if filter_.query_url not in url_to_users:
+                    url_to_users[filter_.query_url] = []
+                url_to_users[filter_.query_url].append((user.id, filter_))
+        
+        for url, user_filters in url_to_users.items():
+            try:
+                ads = await parse_page(url)
+            except Exception as e:
+                logging.error(f"Ошибка парсинга {url}: {e}")
+                await notify_admins(bot, f"Ошибка парсинга: {str(e)}")
+                continue
+            
+            for user_id, filter_ in user_filters:
                 parts = filter_.label.split()
                 make = parts[0].lower() if len(parts) > 0 else ''
                 model = " ".join(parts[1:-1]).lower() if len(parts) > 2 else (parts[1].lower() if len(parts) > 1 else '')
-
+                
                 for ad in ads:
                     title_lower = ad['title'].lower()
                     if make and make not in title_lower:
@@ -113,7 +118,7 @@ async def parse_user_filters(bot: Bot):
                     if not existing:
                         await create_ad(session, ad)
 
-                    sent = await is_ad_sent_to_user(session, user.id, ad['id'])
+                    sent = await is_ad_sent_to_user(session, user_id, ad['id'])
                     if not sent:
                         city = ad.get('city', '')
                         pub = ad.get('published_at', '')
@@ -122,19 +127,22 @@ async def parse_user_filters(bot: Bot):
                         caption = f"<b>{ad['title']}</b>\n\n💰 {ad['price']}\n{location}\n{time_info}\n🔗 {ad['url']}"
                         try:
                             await bot.send_photo(
-                                chat_id=user.id,
+                                chat_id=user_id,
                                 photo=ad['img'],
                                 caption=caption,
                                 parse_mode='HTML'
                             )
                         except Exception as e:
                             await bot.send_message(
-                                chat_id=user.id,
+                                chat_id=user_id,
                                 text=caption,
                                 parse_mode='HTML'
                             )
-                        await create_sent_ad(session, user.id, ad['id'])
-                        print(f"Отправлено пользователю {user.id}: {ad['id']}")
+                        await create_sent_ad(session, user_id, ad['id'])
+                        print(f"Отправлено пользователю {user_id}: {ad['id']}")
+            
+            delay = random.uniform(3, 7)
+            await asyncio.sleep(delay)
 
 async def start_parsing_loop(bot: Bot):
     while True:
