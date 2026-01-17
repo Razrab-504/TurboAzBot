@@ -417,10 +417,7 @@ async def process_max_price(message: Message, state: FSMContext, user):
         min_price = int(data['min_price'])
         
         if price < min_price:
-            await message.reply(
-                f"Максимальная цена не может быть меньше минимальной. Минимальная цена: {min_price} AZN"
-            )
-            return
+            price = min_price
         
         await state.update_data(max_price=str(price))
         user_id = message.from_user.id

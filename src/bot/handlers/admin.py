@@ -160,6 +160,33 @@ async def grant_trial(message: Message):
     
     await message.reply(f"Триальный период на {days} дней выдан пользователю {target_id}")
 
+@admin_router.message(F.text.in_(["Список команд", "Əmrlər siyahısı"]))
+async def list_commands(message: Message):
+    user_id = message.from_user.id
+    async with Local_Session() as session:
+        admin = await get_user(session, user_id)
+        if not admin or admin.role != "admin":
+            lang = admin.language if admin else "ru"
+            await message.reply(texts[lang]["not_admin"])
+            return
+        commands_text = """
+<b>Список команд для админов:</b>
+
+/admin - Открыть панель админа
+/stats - Статистика бота
+/grant_sub &lt;user_id&gt; - Выдать подписку пользователю
+/revoke_sub &lt;user_id&gt; - Отозвать подписку у пользователя
+/grant_trial &lt;user_id&gt; &lt;days&gt; - Выдать триальную подписку
+/broadcast &lt;сообщение&gt; - Рассылка сообщения подписчикам
+
+<b>Кнопки в панели:</b>
+- Управление подписками: Заглушка
+- Просмотр пользователей: Список всех пользователей
+- Рассылка сообщений: Инструкция по /broadcast
+- Список команд: Этот список
+        """
+        await message.reply(commands_text, parse_mode='HTML')
+
 @admin_router.message(F.text == "Рассылка сообщений")
 async def broadcast_ru(message: Message):
     await message.reply("Используйте команду /broadcast <сообщение> для рассылки подписчикам.")
