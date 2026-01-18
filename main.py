@@ -4,6 +4,24 @@ from dotenv import load_dotenv, find_dotenv
 import os
 import asyncio
 import logging
+import os
+from flask import Flask
+from threading import Thread
+
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
 
 from src.bot.handlers.user import user_router
 from src.bot.handlers.admin import admin_router
@@ -33,5 +51,6 @@ async def main():
 if __name__ == "__main__":
     try:
         asyncio.run(main())
+        keep_alive()
     except KeyboardInterrupt:
         print("Bot Stopped")
