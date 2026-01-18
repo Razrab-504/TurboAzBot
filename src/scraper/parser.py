@@ -28,6 +28,7 @@ async def parse_page(url: str) -> list:
     soup = BeautifulSoup(html, 'html.parser')
     ads = []
     cards = soup.find_all('div', class_='products-i')
+    print(f"Парсинг {url}: найдено {len(cards)} карточек")
 
     for card in cards:
         link_tag = card.find('a', class_='products-i__link')
@@ -81,39 +82,49 @@ async def check_expired_subscriptions():
             logging.info(f"Подписка истекла для пользователя {user.id}")
 
 async def parse_user_filters(bot: Bot):
+    print("Запуск парсинга фильтров")
     await check_expired_subscriptions()
-    
+
     async with Local_Session() as session:
         result = await session.execute(select(User).options(joinedload(User.filters)).where(User.subscription == True))
         users = result.scalars().unique().all()
-        
+        print(f"Найдено {len(users)} пользователей с подпиской")
+
         url_to_users = {}
         for user in users:
             for filter_ in user.filters:
                 if filter_.query_url not in url_to_users:
                     url_to_users[filter_.query_url] = []
                 url_to_users[filter_.query_url].append((user.id, filter_))
-        
+
+        print(f"Парсинг {len(url_to_users)} уникальных URL")
+
         for url, user_filters in url_to_users.items():
             try:
                 ads = await parse_page(url)
+                print(f"Для URL найдено {len(ads)} объявлений")
             except Exception as e:
                 logging.error(f"Ошибка парсинга {url}: {e}")
                 await notify_admins(bot, f"Ошибка парсинга: {str(e)}")
                 continue
-            
+
             for user_id, filter_ in user_filters:
                 parts = filter_.label.split()
                 make = parts[0].lower() if len(parts) > 0 else ''
                 model = " ".join(parts[1:-1]).lower() if len(parts) > 2 else (parts[1].lower() if len(parts) > 1 else '')
-                
+
+                filtered_ads = []
                 for ad in ads:
                     title_lower = ad['title'].lower()
                     if make and make not in title_lower:
                         continue
                     if model and model not in title_lower:
                         continue
+                    filtered_ads.append(ad)
 
+                print(f"Для пользователя {user_id} фильтр '{filter_.label}' прошел {len(filtered_ads)} объявлений")
+
+                for ad in filtered_ads:
                     existing = await get_ad_by_id(session, ad['id'])
                     if not existing:
                         await create_ad(session, ad)
@@ -132,20 +143,26 @@ async def parse_user_filters(bot: Bot):
                                 caption=caption,
                                 parse_mode='HTML'
                             )
+                            print(f"Отправлено фото пользователю {user_id}")
                         except Exception as e:
-                            await bot.send_message(
-                                chat_id=user_id,
-                                text=caption,
-                                parse_mode='HTML'
-                            )
+                            try:
+                                await bot.send_message(
+                                    chat_id=user_id,
+                                    text=caption,
+                                    parse_mode='HTML'
+                                )
+                                print(f"Отправлено сообщение пользователю {user_id}")
+                            except Exception as e2:
+                                print(f"Ошибка отправки пользователю {user_id}: {e2}")
                         await create_sent_ad(session, user_id, ad['id'])
                         print(f"Отправлено пользователю {user_id}: {ad['id']}")
-            
+
             delay = random.uniform(3, 7)
             await asyncio.sleep(delay)
 
 async def start_parsing_loop(bot: Bot):
     while True:
         await parse_user_filters(bot)
-        delay = random.uniform(300, 600)
+        delay = random.uniform(60, 120)  # уменьшил для тестирования
+        print(f"Ожидание {delay} секунд до следующего парсинга")
         await asyncio.sleep(delay)

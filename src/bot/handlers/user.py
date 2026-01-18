@@ -415,10 +415,10 @@ async def process_max_price(message: Message, state: FSMContext, user):
         
         data = await state.get_data()
         min_price = int(data['min_price'])
-        
+
         if price < min_price:
             price = min_price
-        
+
         await state.update_data(max_price=str(price))
         user_id = message.from_user.id
         make_name = data['make']
@@ -426,10 +426,44 @@ async def process_max_price(message: Message, state: FSMContext, user):
         make_id = get_make_id(make_name)
         model_id = get_model_id(make_id, model_name) if make_id else None
         min_p = data['min_price']
-        max_p = data['max_price']
-        url = f"https://turbo.az/autos?q[currency]=azn&q[price_from]={min_p}&q[price_to]={max_p}"
+        max_p = str(price)
+        url = (
+            f"https://turbo.az/autos?"
+            f"q[sort]=&"
+            f"q[used]=&"
+            f"q[region][]=&"
+            f"q[price_from]={min_p}&"
+            f"q[price_to]={max_p}&"
+            f"q[currency]=azn&"
+            f"q[loan]=0&"
+            f"q[barter]=0&"
+            f"q[category][]=&"
+            f"q[year_from]=&"
+            f"q[year_to]=&"
+            f"q[color][]=&"
+            f"q[fuel_type][]=&"
+            f"q[gear][]=&"
+            f"q[transmission][]=&"
+            f"q[engine_volume_from]=&"
+            f"q[engine_volume_to]=&"
+            f"q[power_from]=&"
+            f"q[power_to]=&"
+            f"q[mileage_from]=&"
+            f"q[mileage_to]=&"
+            f"q[only_shops]=&"
+            f"q[prior_owners_count][]=&"
+            f"q[seats_count][]=&"
+            f"q[market][]=&"
+            f"q[crashed]=1&"
+            f"q[painted]=1&"
+            f"q[for_spare_parts]=0&"
+            f"q[availability_status]="
+        )
         if make_id:
             url += f"&q[make][]={make_id}"
+        else:
+            url += "&q[make][]="
+        url += "&q[model][]="
         if model_id:
             url += f"&q[model][]={model_id}"
         label = f"{data['make']} {data['model']} {min_p}-{max_p}"
