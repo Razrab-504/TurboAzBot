@@ -7,4 +7,3 @@ beautifulsoup4
 aiohttp
 asyncpg==0.28.0
 psycopg2-binary
-flask

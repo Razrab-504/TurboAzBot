@@ -4,24 +4,7 @@ from dotenv import load_dotenv, find_dotenv
 import os
 import asyncio
 import logging
-import os
-from flask import Flask
-from threading import Thread
-
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Bot is running!"
-
-def run():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
-
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
-
+from aiohttp import web
 
 from src.bot.handlers.user import user_router
 from src.bot.handlers.admin import admin_router
@@ -41,16 +24,31 @@ dp.callback_query.middleware(LanguageMiddleware())
 dp.include_router(user_router)
 dp.include_router(admin_router)
 
+async def handle_ping(request):
+    return web.Response(text="I am alive! Bot is running.")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get('/', handle_ping)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", 8080)) 
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    logging.info(f"Web server started on port {port}")
+# ---------------------------------------------
+
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
 
     asyncio.create_task(start_parsing_loop(bot))
+    
+    asyncio.create_task(start_web_server())
 
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
-        keep_alive()
     except KeyboardInterrupt:
         print("Bot Stopped")
