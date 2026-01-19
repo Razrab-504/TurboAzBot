@@ -5,6 +5,7 @@ import logging
 from bs4 import BeautifulSoup
 import pyppeteer
 from pyppeteer import launch
+from pyppeteer_stealth import stealth
 
 from src.db.session import Local_Session
 
@@ -25,6 +26,7 @@ import datetime
 async def parse_page(url: str) -> list:
     browser = await launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
     page = await browser.newPage()
+    await stealth(page)
     await page.setUserAgent(random.choice(USER_AGENTS))
     await page.setExtraHTTPHeaders({
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
