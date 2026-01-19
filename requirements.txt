@@ -10,3 +10,4 @@ setuptools
 psycopg2-binary
 fastapi
 uvicorn
+pyppeteer
