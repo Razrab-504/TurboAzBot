@@ -8,3 +8,5 @@ aiohttp
 asyncpg>=0.29.0
 setuptools
 psycopg2-binary
+fastapi
+uvicorn

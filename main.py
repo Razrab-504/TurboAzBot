@@ -24,28 +24,47 @@ dp.callback_query.middleware(LanguageMiddleware())
 dp.include_router(user_router)
 dp.include_router(admin_router)
 
+async def handle_webhook(request):
+    data = await request.read()
+    update = await dp.feed_webhook_update(bot, data)
+    return web.Response(text="OK")
+
 async def handle_ping(request):
     return web.Response(text="I am alive! Bot is running.")
 
 async def start_web_server():
     app = web.Application()
+    app.router.add_post('/webhook', handle_webhook)
     app.router.add_get('/', handle_ping)
     runner = web.AppRunner(app)
     await runner.setup()
-    port = int(os.getenv("PORT", 8080)) 
+    port = int(os.getenv("PORT", 8080))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     logging.info(f"Web server started on port {port}")
+
+    # Set webhook if WEBHOOK_URL is set
+    webhook_url = os.getenv("WEBHOOK_URL")
+    if webhook_url:
+        await bot.set_webhook(webhook_url + "/webhook")
+        logging.info(f"Webhook set to {webhook_url}/webhook")
+    else:
+        await bot.delete_webhook()
+        logging.info("Using polling")
+
 # ---------------------------------------------
 
 async def main():
-    await bot.delete_webhook(drop_pending_updates=True)
-
     asyncio.create_task(start_parsing_loop(bot))
-    
+
     asyncio.create_task(start_web_server())
 
-    await dp.start_polling(bot)
+    if not os.getenv("WEBHOOK_URL"):
+        await dp.start_polling(bot)
+    else:
+        # If webhook, just keep running
+        while True:
+            await asyncio.sleep(3600)
 
 if __name__ == "__main__":
     try:
