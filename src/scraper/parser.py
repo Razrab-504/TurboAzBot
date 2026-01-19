@@ -35,6 +35,7 @@ async def parse_page(url: str) -> list:
     try:
         await page.goto(url, {'waitUntil': 'networkidle2', 'timeout': 30000})
         html = await page.content()
+        print(f"HTML preview: {html[:500]}")
     except Exception as e:
         print(f"Ошибка парсинга {url}: {e}")
         await browser.close()
