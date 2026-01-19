@@ -24,7 +24,7 @@ from aiogram import Bot
 import datetime
 
 async def parse_page(url: str) -> list:
-    browser = await launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
+    browser = await launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'])
     page = await browser.newPage()
     await stealth(page)
     await page.setUserAgent(random.choice(USER_AGENTS))
@@ -35,7 +35,8 @@ async def parse_page(url: str) -> list:
         'Upgrade-Insecure-Requests': '1',
     })
     try:
-        await page.goto(url, {'waitUntil': 'networkidle2', 'timeout': 30000})
+        await page.goto(url, {'waitUntil': 'domcontentloaded', 'timeout': 60000})
+        await asyncio.sleep(10)  # Wait for challenge
         html = await page.content()
         print(f"HTML preview: {html[:500]}")
     except Exception as e:
