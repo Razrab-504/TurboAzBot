@@ -13,7 +13,7 @@ class SearchFilter(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
     
-    query_url: Mapped[str] = mapped_column(String(512))  # Ссылка на Turbo.az с примененными фильтрами
+    query_url: Mapped[str] = mapped_column(String(2048))  # Ссылка на Turbo.az с примененными фильтрами
     label: Mapped[str | None] = mapped_column(String(64)) # Название фильтра для пользователя (напр. "Мои Приусы")
 
     user: Mapped["User"] = relationship("User", back_populates="filters")
