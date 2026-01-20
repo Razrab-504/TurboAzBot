@@ -427,54 +427,25 @@ async def process_max_price(message: Message, state: FSMContext, user):
         model_id = get_model_id(make_id, model_name) if make_id else None
         min_p = data['min_price']
         max_p = str(price)
-        url = (
-            f"https://turbo.az/autos?"
-            f"q[sort]=&"
-            f"q[used]=&"
-            f"q[region][]=&"
-            f"q[price_from]={min_p}&"
-            f"q[price_to]={max_p}&"
-            f"q[currency]=azn&"
-            f"q[loan]=0&"
-            f"q[barter]=0&"
-            f"q[category][]=&"
-            f"q[year_from]=&"
-            f"q[year_to]=&"
-            f"q[color][]=&"
-            f"q[fuel_type][]=&"
-            f"q[gear][]=&"
-            f"q[transmission][]=&"
-            f"q[engine_volume_from]=&"
-            f"q[engine_volume_to]=&"
-            f"q[power_from]=&"
-            f"q[power_to]=&"
-            f"q[mileage_from]=&"
-            f"q[mileage_to]=&"
-            f"q[only_shops]=&"
-            f"q[prior_owners_count][]=&"
-            f"q[seats_count][]=&"
-            f"q[market][]=&"
-            f"q[crashed]=1&"
-            f"q[painted]=1&"
-            f"q[for_spare_parts]=0&"
-            f"q[availability_status]="
-        )
+        
+        params = []
+        params.append(f"q[price_from]={min_p}")
+        params.append(f"q[price_to]={max_p}")
+        params.append("q[currency]=azn")
+        
         if make_id:
-            url += f"&q[make][]={make_id}"
-        else:
-            url += "&q[make][]="
-        url += "&q[model][]="
-        if model_id:
-            url += f"&q[model][]={model_id}"
+            params.append(f"q[make][]={make_id}")
+            if model_id:
+                params.append(f"q[model][]={model_id}")
+        
+        url = "https://turbo.az/autos?" + "&".join(params)
+        
         label = f"{data['make']} {data['model']} {min_p}-{max_p}"
 
         async with Local_Session() as session:
             filter_obj = SearchFilter(user_id=user_id, query_url=url, label=label)
             session.add(filter_obj)
             await session.commit()
-            from src.db.session import Local_Session as LS
-            async with LS() as sess:
-                await update_user(sess, user_id, subscription=True)
 
         await state.clear()
         keyboard = get_user_keyboard(user.language)
