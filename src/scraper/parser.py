@@ -1,10 +1,11 @@
 import asyncio
-import aiohttp
 import random
 import logging
 from bs4 import BeautifulSoup
 import ssl
 import certifi
+import requests
+from requests.auth import HTTPBasicAuth
 
 from src.db.session import Local_Session
 
@@ -32,34 +33,26 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             }
 
-            # Корректная конфигурация SSL для Render
-            ssl_context = ssl.create_default_context(cafile=certifi.where())
-            ssl_context.check_hostname = True
-            ssl_context.verify_mode = ssl.CERT_REQUIRED
+            # Используем requests для более надежного взаимодействия
+            scrape_url = 'https://api.scrape.do/'
+            auth = HTTPBasicAuth(api_key, 'scraperapi')
+            params = {
+                'url': url,
+                'render': 'false'
+            }
             
-            connector = aiohttp.TCPConnector(ssl=ssl_context, limit=10)
-            timeout = aiohttp.ClientTimeout(total=60)
+            response = requests.get(scrape_url, params=params, auth=auth, headers=headers, timeout=60)
             
-            # Scrape.do использует параметры в GET запросе
-            async with aiohttp.ClientSession(headers=headers, timeout=timeout, connector=connector) as session:
-                auth = aiohttp.BasicAuth(api_key, 'scraperapi')
-                
-                scrape_url = 'https://api.scrape.do/'
-                params = {
-                    'url': url,
-                    'render': 'false'
-                }
-                
-                async with session.get(scrape_url, params=params, auth=auth) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        logging.error(f"Scrape.do error {response.status}: {error_text[:200]}")
-                        if attempt < max_retries - 1:
-                            await asyncio.sleep(random.uniform(3, 7))
-                            continue
-                        else:
-                            return []
-                    html = await response.text()
+            if response.status_code != 200:
+                error_text = response.text
+                logging.error(f"Scrape.do error {response.status_code}: {error_text[:200]}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(random.uniform(3, 7))
+                    continue
+                else:
+                    return []
+            
+            html = response.text
 
             # Проверяем, не ошибка ли
             if "error" in html.lower() or len(html) < 500:
