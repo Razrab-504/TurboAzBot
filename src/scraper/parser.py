@@ -97,7 +97,7 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
                     await page.goto(url, wait_until='domcontentloaded', timeout=90000)
                     
                     # Дополнительная задержка для полной загрузки
-                    await asyncio.sleep(random.uniform(5, 10))
+                    await asyncio.sleep(30)
 
                     html = await page.content()
                     logging.info(f"HTML length: {len(html)}, preview: {html[:500]}")
