@@ -39,7 +39,8 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
             response = requests.get(
                 scraping_url,
                 headers=headers,
-                timeout=90
+                timeout=90,
+                verify=False
             )
 
             logging.info(f"Статус ответа: {response.status_code}")
