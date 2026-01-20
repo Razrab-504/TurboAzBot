@@ -96,11 +96,8 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
                     # Переход на страницу с увеличенным таймаутом
                     await page.goto(url, wait_until='domcontentloaded', timeout=90000)
                     
-                    # Ждем загрузки контента (не Cloudflare страницы)
-                    await page.wait_for_selector('.products-i', timeout=60000)
-                    
                     # Дополнительная задержка для полной загрузки
-                    await asyncio.sleep(random.uniform(2, 4))
+                    await asyncio.sleep(random.uniform(5, 10))
                     
                     html = await page.content()
                     
