@@ -27,15 +27,7 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
 
     for attempt in range(max_retries):
         try:
-            scrape_url = 'https://api.scrape.do/'
-            
-            auth = HTTPBasicAuth(api_key, '')
-            
-            params = {
-                'url': url,
-                'render': 'true',
-                'geoCode': 'az'
-            }
+            scraping_url = f"https://api.scrapingapi.com/scrape?api_key={api_key}&url={quote(url)}"
             
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -44,33 +36,31 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
             logging.info(f"Попытка {attempt + 1}: Парсинг URL длиной {len(url)} символов")
             
             response = requests.get(
-                scrape_url, 
-                params=params, 
-                auth=auth, 
-                headers=headers, 
+                scraping_url,
+                headers=headers,
                 timeout=90
             )
-            
+
             logging.info(f"Статус ответа: {response.status_code}")
-            
+
             if response.status_code == 400:
                 error_text = response.text[:300]
                 logging.error(f"Ошибка 400 - некорректный URL или параметры")
                 logging.error(f"URL: {url}")
                 logging.error(f"Ответ API: {error_text}")
                 return []
-            
+
             if response.status_code == 403:
                 logging.error("Ошибка 403 - проверьте API ключ или баланс")
                 return []
-                
+
             if response.status_code == 429:
                 logging.error("Ошибка 429 - превышен лимит запросов")
                 if attempt < max_retries - 1:
                     await asyncio.sleep(random.uniform(30, 60))
                     continue
                 return []
-            
+
             if response.status_code != 200:
                 error_text = response.text[:300]
                 logging.error(f"Ошибка {response.status_code}: {error_text}")
@@ -78,7 +68,7 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
                     await asyncio.sleep(random.uniform(5, 10))
                     continue
                 return []
-            
+
             html = response.text
 
             if len(html) < 500:
