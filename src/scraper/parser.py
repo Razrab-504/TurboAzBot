@@ -33,7 +33,7 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
             
             params = {
                 'url': url,
-                'render': 'false',
+                'render': 'true',
                 'geoCode': 'az'
             }
             
