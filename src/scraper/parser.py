@@ -6,6 +6,7 @@ import ssl
 import certifi
 import requests
 from requests.auth import HTTPBasicAuth
+from urllib.parse import quote
 
 from src.db.session import Local_Session
 
