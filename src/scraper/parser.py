@@ -33,8 +33,9 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             }
 
+            connector = aiohttp.TCPConnector(ssl=False)  # Disable SSL verification
             timeout = aiohttp.ClientTimeout(total=60)
-            async with aiohttp.ClientSession(headers=headers, timeout=timeout) as session:
+            async with aiohttp.ClientSession(headers=headers, timeout=timeout, connector=connector) as session:
                 async with session.get(scraping_url) as response:
                     if response.status != 200:
                         logging.error(f"ScrapingAPI error: {response.status}")
