@@ -40,17 +40,17 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
             connector = aiohttp.TCPConnector(ssl=ssl_context, limit=10)
             timeout = aiohttp.ClientTimeout(total=60)
             
-            # Используем базовую аутентификацию для scrape.do
+            # Scrape.do использует параметры в GET запросе
             async with aiohttp.ClientSession(headers=headers, timeout=timeout, connector=connector) as session:
-                # Scrape.do использует базовую аутентификацию
                 auth = aiohttp.BasicAuth(api_key, 'scraperapi')
                 
-                payload = {
+                scrape_url = 'https://api.scrape.do/'
+                params = {
                     'url': url,
                     'render': 'false'
                 }
                 
-                async with session.post('https://api.scrape.do/', params=payload, auth=auth) as response:
+                async with session.get(scrape_url, params=params, auth=auth) as response:
                     if response.status != 200:
                         error_text = await response.text()
                         logging.error(f"Scrape.do error {response.status}: {error_text[:200]}")
