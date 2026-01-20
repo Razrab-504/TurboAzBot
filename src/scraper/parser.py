@@ -4,6 +4,8 @@ import random
 import logging
 from bs4 import BeautifulSoup
 from urllib.parse import quote
+import ssl
+import certifi
 
 from src.db.session import Local_Session
 
@@ -33,7 +35,12 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             }
 
-            connector = aiohttp.TCPConnector(ssl=False)  # Disable SSL verification
+            # Корректная конфигурация SSL для Render
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+            ssl_context.check_hostname = True
+            ssl_context.verify_mode = ssl.CERT_REQUIRED
+            
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
             timeout = aiohttp.ClientTimeout(total=60)
             async with aiohttp.ClientSession(headers=headers, timeout=timeout, connector=connector) as session:
                 async with session.get(scraping_url) as response:
