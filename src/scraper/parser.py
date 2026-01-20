@@ -33,7 +33,6 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             }
 
-            # Используем requests для более надежного взаимодействия
             scrape_url = 'https://api.scrape.do/'
             auth = HTTPBasicAuth(api_key, 'scraperapi')
             params = {
@@ -54,7 +53,6 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
             
             html = response.text
 
-            # Проверяем, не ошибка ли
             if "error" in html.lower() or len(html) < 500:
                 logging.warning(f"Invalid response from Scrape.do on attempt {attempt + 1}, length: {len(html)}")
                 if attempt < max_retries - 1:
@@ -65,7 +63,6 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
 
             logging.info(f"Успешно получен HTML от Scrape.do для {url}")
 
-            # Парсинг HTML
             soup = BeautifulSoup(html, 'html.parser')
             ads = []
             cards = soup.find_all('div', class_='products-i')
@@ -228,7 +225,6 @@ async def parse_user_filters(bot: Bot):
                         
                         await create_sent_ad(session, user_id, ad['id'])
 
-            # Задержка между URL
             delay = random.uniform(10, 20)
             await asyncio.sleep(delay)
 

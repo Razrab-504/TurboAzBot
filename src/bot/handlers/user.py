@@ -488,3 +488,41 @@ async def process_max_price(message: Message, state: FSMContext, user):
     except ValueError:
         await message.reply("Введите корректную цену (целое положительное число)")
 
+
+@user_router.message(F.text.in_(["Просмотреть мои фильтры", "Filtrlərimi göstər"]))
+async def view_filters(message: Message, state: FSMContext, user):
+    user_id = message.from_user.id
+    async with Local_Session() as session:
+        from src.db.crud.filter_crud import get_user_filters
+        filters = await get_user_filters(session, user_id)
+    
+    if not filters:
+        no_filters_msg = "У вас нет фильтров." if user.language == "ru" else "Sizdə filtrlər yoxdur."
+        await message.reply(no_filters_msg)
+        return
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+    for f in filters:
+        btn_text = f"❌ {f.label}"
+        keyboard.inline_keyboard.append([InlineKeyboardButton(text=btn_text, callback_data=f"delete_filter_{f.id}")])
+    
+    header = "Ваши фильтры:\n\n" if user.language == "ru" else "Sizin filtrləriniz:\n\n"
+    await message.reply(header + "\n".join([f.label for f in filters]), reply_markup=keyboard)
+
+
+@user_router.callback_query(F.data.startswith("delete_filter_"))
+async def delete_filter_callback(callback: CallbackQuery, state: FSMContext, user):
+    filter_id = int(callback.data.split("_")[-1])
+    user_id = callback.from_user.id
+    
+    async with Local_Session() as session:
+        from src.db.crud.filter_crud import delete_filter
+        success = await delete_filter(session, filter_id)
+    
+    if success:
+        del_msg = "Фильтр удален." if user.language == "ru" else "Filtr silindi."
+    else:
+        del_msg = "Ошибка удаления." if user.language == "ru" else "Silmə xətası."
+    
+    await callback.answer(del_msg, show_alert=True)
+    await callback.message.delete()
