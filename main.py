@@ -4,6 +4,7 @@ from dotenv import load_dotenv, find_dotenv
 import os
 import asyncio
 import logging
+import subprocess
 from aiohttp import web
 
 from src.bot.handlers.user import user_router
@@ -14,6 +15,12 @@ from src.scraper.parser import start_parsing_loop
 logging.basicConfig(level=logging.INFO)
 
 load_dotenv(find_dotenv())
+
+# Install playwright browsers if not present
+try:
+    subprocess.run(["playwright", "install", "chromium"], check=True)
+except Exception as e:
+    logging.warning(f"Failed to install playwright browsers: {e}")
 
 bot = Bot(token=os.getenv("BOT_TOKEN"))
 dp = Dispatcher(storage=MemoryStorage())
