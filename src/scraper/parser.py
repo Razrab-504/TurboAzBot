@@ -3,9 +3,7 @@ import aiohttp
 import random
 import logging
 from bs4 import BeautifulSoup
-import pyppeteer
-from pyppeteer import launch
-from pyppeteer_stealth import stealth
+from playwright.async_api import async_playwright
 
 from src.db.session import Local_Session
 
@@ -24,27 +22,29 @@ from aiogram import Bot
 import datetime
 
 async def parse_page(url: str) -> list:
-    browser = await launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'])
-    page = await browser.newPage()
-    await stealth(page)
-    await page.setUserAgent(random.choice(USER_AGENTS))
-    await page.setExtraHTTPHeaders({
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'en-US,en;q=0.9,ru;q=0.8,az;q=0.7',
-        'DNT': '1',
-        'Upgrade-Insecure-Requests': '1',
-    })
-    try:
-        await page.goto(url, {'waitUntil': 'domcontentloaded', 'timeout': 60000})
-        await asyncio.sleep(10)  # Wait for challenge
-        html = await page.content()
-        print(f"HTML preview: {html[:500]}")
-    except Exception as e:
-        print(f"Ошибка парсинга {url}: {e}")
-        await browser.close()
-        return []
-    finally:
-        await browser.close()
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
+        context = await browser.new_context(
+            user_agent=random.choice(USER_AGENTS),
+            extra_http_headers={
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Accept-Language': 'en-US,en;q=0.9,ru;q=0.8,az;q=0.7',
+                'DNT': '1',
+                'Upgrade-Insecure-Requests': '1',
+            }
+        )
+        page = await context.new_page()
+        try:
+            await page.goto(url, wait_until='domcontentloaded', timeout=60000)
+            await asyncio.sleep(15)  # Wait for Cloudflare challenge
+            html = await page.content()
+            print(f"HTML preview: {html[:500]}")
+        except Exception as e:
+            print(f"Ошибка парсинга {url}: {e}")
+            await browser.close()
+            return []
+        finally:
+            await browser.close()
 
     soup = BeautifulSoup(html, 'html.parser')
     ads = []
