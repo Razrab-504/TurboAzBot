@@ -22,8 +22,15 @@ from aiogram import Bot
 import datetime
 
 async def parse_page(url: str) -> list:
+    import os
+    proxy_list = os.getenv("PROXY_LIST", "").split(",") if os.getenv("PROXY_LIST") else []
+    proxy = None
+    if proxy_list:
+        import random
+        proxy = {"server": random.choice(proxy_list)}
+
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
+        browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'], proxy=proxy)
         context = await browser.new_context(
             user_agent=random.choice(USER_AGENTS),
             extra_http_headers={
