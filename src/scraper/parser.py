@@ -98,8 +98,9 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
                     
                     # Дополнительная задержка для полной загрузки
                     await asyncio.sleep(random.uniform(5, 10))
-                    
+
                     html = await page.content()
+                    logging.info(f"HTML length: {len(html)}, preview: {html[:500]}")
                     
                     # Проверяем, не Cloudflare ли это
                     if "Just a moment" in html or "Checking your browser" in html:
