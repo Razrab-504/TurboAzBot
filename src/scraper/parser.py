@@ -3,7 +3,6 @@ import aiohttp
 import random
 import logging
 from bs4 import BeautifulSoup
-from urllib.parse import quote
 import ssl
 import certifi
 
@@ -20,7 +19,7 @@ import datetime
 import os
 
 async def parse_page(url: str, max_retries: int = 3) -> list:
-    """Парсинг страницы через ScrapingAPI"""
+    """Парсинг страницы через Scrape.do API"""
     
     api_key = os.getenv("SCRAPING_API_KEY")
     if not api_key:
@@ -29,10 +28,17 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
 
     for attempt in range(max_retries):
         try:
-            scraping_url = f"https://api.scrapingapi.com/scrape?api_key={api_key}&url={quote(url)}"
-
+            # Используем scrape.do API
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            }
+
+            # Параметры для scrape.do
+            params = {
+                'apiKey': api_key,
+                'url': url,
+                'render': 'false',  # Не используем JS рендеринг
+                'timeout': '30000'
             }
 
             # Корректная конфигурация SSL для Render
@@ -40,12 +46,13 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
             ssl_context.check_hostname = True
             ssl_context.verify_mode = ssl.CERT_REQUIRED
             
-            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            connector = aiohttp.TCPConnector(ssl=ssl_context, limit=10)
             timeout = aiohttp.ClientTimeout(total=60)
+            
             async with aiohttp.ClientSession(headers=headers, timeout=timeout, connector=connector) as session:
-                async with session.get(scraping_url) as response:
+                async with session.get('https://api.scrape.do', params=params) as response:
                     if response.status != 200:
-                        logging.error(f"ScrapingAPI error: {response.status}")
+                        logging.error(f"Scrape.do error: {response.status}")
                         if attempt < max_retries - 1:
                             await asyncio.sleep(random.uniform(3, 7))
                             continue
@@ -54,15 +61,15 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
                     html = await response.text()
 
             # Проверяем, не ошибка ли
-            if "error" in html.lower() or len(html) < 1000:
-                logging.warning(f"Invalid response from ScrapingAPI on attempt {attempt + 1}")
+            if "error" in html.lower() or len(html) < 500:
+                logging.warning(f"Invalid response from Scrape.do on attempt {attempt + 1}")
                 if attempt < max_retries - 1:
                     await asyncio.sleep(random.uniform(5, 10))
                     continue
                 else:
                     return []
 
-            logging.info(f"Успешно получен HTML от ScrapingAPI для {url}")
+            logging.info(f"Успешно получен HTML от Scrape.do для {url}")
 
             # Парсинг HTML
             soup = BeautifulSoup(html, 'html.parser')
