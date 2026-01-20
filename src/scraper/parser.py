@@ -3,16 +3,10 @@ import aiohttp
 import random
 import logging
 from bs4 import BeautifulSoup
-from playwright.async_api import async_playwright
-# from playwright_stealth import stealth
+from urllib.parse import quote
 
 from src.db.session import Local_Session
 
-USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-]
 from src.db.crud.advertisement_crud import get_ad_by_id, create_ad
 from src.db.crud.sent_ad_crud import is_ad_sent_to_user, create_sent_ad
 from src.db.crud.user_crud import update_user
@@ -24,106 +18,43 @@ import datetime
 import os
 
 async def parse_page(url: str, max_retries: int = 3) -> list:
-    """Парсинг страницы с обходом Cloudflare и повторными попытками"""
+    """Парсинг страницы через ScrapingAPI"""
     
+    api_key = os.getenv("SCRAPING_API_KEY")
+    if not api_key:
+        logging.error("SCRAPING_API_KEY not set")
+        return []
+
     for attempt in range(max_retries):
         try:
-            proxy_list = os.getenv("PROXY_LIST", "").split(",") if os.getenv("PROXY_LIST") else []
-            proxy = None
-            if proxy_list:
-                proxy_str = random.choice(proxy_list).strip()
-                if proxy_str:
-                    proxy = {"server": proxy_str}
+            scraping_url = f"https://api.scrapingapi.com/scrape?api_key={api_key}&url={quote(url)}"
 
-            async with async_playwright() as p:
-                # Запуск браузера с дополнительными аргументами
-                browser = await p.chromium.launch(
-                    headless=True,
-                    args=[
-                        '--no-sandbox',
-                        '--disable-setuid-sandbox',
-                        '--disable-blink-features=AutomationControlled',
-                        '--disable-dev-shm-usage',
-                        '--disable-accelerated-2d-canvas',
-                        '--disable-gpu',
-                        '--window-size=1920,1080',
-                    ],
-                    proxy=proxy
-                )
-                
-                # Создание контекста с реалистичными параметрами
-                context = await browser.new_context(
-                    user_agent=random.choice(USER_AGENTS),
-                    viewport={'width': 1920, 'height': 1080},
-                    locale='ru-RU',
-                    timezone_id='Asia/Baku',
-                    extra_http_headers={
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-                        'Accept-Encoding': 'gzip, deflate, br',
-                        'DNT': '1',
-                        'Connection': 'keep-alive',
-                        'Upgrade-Insecure-Requests': '1',
-                        'Sec-Fetch-Dest': 'document',
-                        'Sec-Fetch-Mode': 'navigate',
-                        'Sec-Fetch-Site': 'none',
-                        'Cache-Control': 'max-age=0',
-                    }
-                )
-                
-                page = await context.new_page()
-                
-                # Применяем stealth для обхода детекции
-                # await stealth(page)
-                
-                # Добавляем JavaScript для маскировки автоматизации
-                await page.add_init_script("""
-                    Object.defineProperty(navigator, 'webdriver', {
-                        get: () => undefined
-                    });
-                    Object.defineProperty(navigator, 'plugins', {
-                        get: () => [1, 2, 3, 4, 5]
-                    });
-                    Object.defineProperty(navigator, 'languages', {
-                        get: () => ['ru-RU', 'ru', 'en-US', 'en']
-                    });
-                    window.chrome = {
-                        runtime: {}
-                    };
-                """)
-                
-                try:
-                    # Переход на страницу с увеличенным таймаутом
-                    await page.goto(url, wait_until='domcontentloaded', timeout=90000)
-                    
-                    # Дополнительная задержка для полной загрузки
-                    await asyncio.sleep(30)
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            }
 
-                    html = await page.content()
-                    logging.info(f"HTML length: {len(html)}, preview: {html[:500]}")
-                    
-                    # Проверяем, не Cloudflare ли это
-                    if "Just a moment" in html or "Checking your browser" in html:
-                        logging.warning(f"Cloudflare challenge detected on attempt {attempt + 1}")
-                        await browser.close()
+            timeout = aiohttp.ClientTimeout(total=60)
+            async with aiohttp.ClientSession(headers=headers, timeout=timeout) as session:
+                async with session.get(scraping_url) as response:
+                    if response.status != 200:
+                        logging.error(f"ScrapingAPI error: {response.status}")
                         if attempt < max_retries - 1:
-                            await asyncio.sleep(random.uniform(5, 10))
+                            await asyncio.sleep(random.uniform(3, 7))
                             continue
                         else:
                             return []
-                    
-                    logging.info(f"Успешно загружена страница: {url}")
-                    
-                except Exception as e:
-                    logging.error(f"Ошибка при загрузке страницы (попытка {attempt + 1}): {e}")
-                    await browser.close()
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(random.uniform(3, 7))
-                        continue
-                    else:
-                        return []
-                finally:
-                    await browser.close()
+                    html = await response.text()
+
+            # Проверяем, не ошибка ли
+            if "error" in html.lower() or len(html) < 1000:
+                logging.warning(f"Invalid response from ScrapingAPI on attempt {attempt + 1}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(random.uniform(5, 10))
+                    continue
+                else:
+                    return []
+
+            logging.info(f"Успешно получен HTML от ScrapingAPI для {url}")
 
             # Парсинг HTML
             soup = BeautifulSoup(html, 'html.parser')

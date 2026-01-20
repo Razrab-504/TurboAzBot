@@ -10,6 +10,4 @@ setuptools
 psycopg2-binary
 fastapi
 uvicorn
-playwright
-playwright-stealth
 lxml
