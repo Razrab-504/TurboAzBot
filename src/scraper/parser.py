@@ -28,17 +28,8 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
 
     for attempt in range(max_retries):
         try:
-            # Используем scrape.do API
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            }
-
-            # Параметры для scrape.do
-            params = {
-                'apiKey': api_key,
-                'url': url,
-                'render': 'false',  # Не используем JS рендеринг
-                'timeout': '30000'
             }
 
             # Корректная конфигурация SSL для Render
@@ -49,10 +40,20 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
             connector = aiohttp.TCPConnector(ssl=ssl_context, limit=10)
             timeout = aiohttp.ClientTimeout(total=60)
             
+            # Используем базовую аутентификацию для scrape.do
             async with aiohttp.ClientSession(headers=headers, timeout=timeout, connector=connector) as session:
-                async with session.get('https://api.scrape.do', params=params) as response:
+                # Scrape.do использует базовую аутентификацию
+                auth = aiohttp.BasicAuth(api_key, 'scraperapi')
+                
+                payload = {
+                    'url': url,
+                    'render': 'false'
+                }
+                
+                async with session.post('https://api.scrape.do/', params=payload, auth=auth) as response:
                     if response.status != 200:
-                        logging.error(f"Scrape.do error: {response.status}")
+                        error_text = await response.text()
+                        logging.error(f"Scrape.do error {response.status}: {error_text[:200]}")
                         if attempt < max_retries - 1:
                             await asyncio.sleep(random.uniform(3, 7))
                             continue
@@ -62,7 +63,7 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
 
             # Проверяем, не ошибка ли
             if "error" in html.lower() or len(html) < 500:
-                logging.warning(f"Invalid response from Scrape.do on attempt {attempt + 1}")
+                logging.warning(f"Invalid response from Scrape.do on attempt {attempt + 1}, length: {len(html)}")
                 if attempt < max_retries - 1:
                     await asyncio.sleep(random.uniform(5, 10))
                     continue
