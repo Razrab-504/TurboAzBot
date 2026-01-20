@@ -32,7 +32,7 @@ dp.include_router(user_router)
 dp.include_router(admin_router)
 
 async def handle_webhook(request):
-    data = await request.read()
+    data = await request.json()
     update = await dp.feed_webhook_update(bot, data)
     return web.Response(text="OK")
 
