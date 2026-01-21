@@ -4,8 +4,7 @@ import logging
 from bs4 import BeautifulSoup
 import ssl
 import certifi
-import requests
-from requests.auth import HTTPBasicAuth
+import aiohttp
 from urllib.parse import quote
 
 from src.db.session import Local_Session
@@ -26,120 +25,117 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
         logging.error("SCRAPING_API_KEY not set")
         return []
 
-    for attempt in range(max_retries):
-        try:
-            scraping_url = f"https://api.scrapingapi.com/scrape?api_key={api_key}&url={quote(url)}"
-            
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-            
-            logging.info(f"Попытка {attempt + 1}: Парсинг URL длиной {len(url)} символов")
-            
-            response = requests.get(
-                scraping_url,
-                headers=headers,
-                timeout=90,
-                verify=False
-            )
+    connector = aiohttp.TCPConnector(verify_ssl=False)
+    timeout = aiohttp.ClientTimeout(total=90)
+    async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+        for attempt in range(max_retries):
+            try:
+                scraping_url = f"https://api.scrapingapi.com/scrape?api_key={api_key}&url={quote(url)}"
 
-            logging.info(f"Статус ответа: {response.status_code}")
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
 
-            if response.status_code == 400:
-                error_text = response.text[:300]
-                logging.error(f"Ошибка 400 - некорректный URL или параметры")
-                logging.error(f"URL: {url}")
-                logging.error(f"Ответ API: {error_text}")
-                return []
+                logging.info(f"Попытка {attempt + 1}: Парсинг URL длиной {len(url)} символов")
 
-            if response.status_code == 403:
-                logging.error("Ошибка 403 - проверьте API ключ или баланс")
-                return []
+                async with session.get(scraping_url, headers=headers) as response:
+                    logging.info(f"Статус ответа: {response.status}")
 
-            if response.status_code == 429:
-                logging.error("Ошибка 429 - превышен лимит запросов")
+                    if response.status == 400:
+                        error_text = (await response.text())[:300]
+                        logging.error(f"Ошибка 400 - некорректный URL или параметры")
+                        logging.error(f"URL: {url}")
+                        logging.error(f"Ответ API: {error_text}")
+                        return []
+
+                    if response.status == 403:
+                        logging.error("Ошибка 403 - проверьте API ключ или баланс")
+                        return []
+
+                    if response.status == 429:
+                        logging.error("Ошибка 429 - превышен лимит запросов")
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(random.uniform(30, 60))
+                            continue
+                        return []
+
+                    if response.status != 200:
+                        error_text = (await response.text())[:300]
+                        logging.error(f"Ошибка {response.status}: {error_text}")
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(random.uniform(5, 10))
+                            continue
+                        return []
+
+                    html = await response.text()
+
+                    if len(html) < 500:
+                        logging.warning(f"Слишком короткий ответ: {len(html)} байт")
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(random.uniform(5, 10))
+                            continue
+                        return []
+
+                    soup = BeautifulSoup(html, 'lxml')
+                    ads = []
+                    cards = soup.find_all('div', class_='products-i')
+
+                    logging.info(f"Найдено {len(cards)} карточек объявлений")
+
+                    for card in cards:
+                        try:
+                            link_tag = card.find('a', class_='products-i__link')
+                            if not link_tag or 'href' not in link_tag.attrs:
+                                continue
+
+                            ad_url = 'https://turbo.az' + link_tag['href']
+                            ad_id = ad_url.split('/')[-1].split('?')[0]
+
+                            title_tag = card.find('div', class_='products-i__name')
+                            title = title_tag.text.strip() if title_tag else 'Без названия'
+
+                            price_tag = card.find('div', class_='product-price')
+                            price = price_tag.text.strip() if price_tag else 'Цена не указана'
+
+                            img_tag = card.find('img', class_='products-i__photo')
+                            img_url = ''
+                            if img_tag:
+                                img_url = img_tag.get('data-src') or img_tag.get('src', '')
+
+                            datetime_tag = card.find('div', class_='products-i__datetime')
+                            datetime_str = datetime_tag.text.strip() if datetime_tag else ''
+
+                            ads.append({
+                                'id': ad_id,
+                                'title': title,
+                                'price': price,
+                                'url': ad_url,
+                                'img': img_url,
+                                'city': datetime_str.split(',')[0] if ',' in datetime_str else '',
+                                'published_at': datetime_str.split(',')[1].strip() if ',' in datetime_str else datetime_str
+                            })
+                        except Exception as e:
+                            logging.warning(f"Ошибка парсинга карточки: {e}")
+                            continue
+
+                    logging.info(f"Успешно спарсено {len(ads)} объявлений")
+                    return ads
+
+            except asyncio.TimeoutError:
+                logging.error(f"Timeout на попытке {attempt + 1}")
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(random.uniform(30, 60))
+                    await asyncio.sleep(random.uniform(10, 15))
                     continue
                 return []
 
-            if response.status_code != 200:
-                error_text = response.text[:300]
-                logging.error(f"Ошибка {response.status_code}: {error_text}")
+            except Exception as e:
+                logging.error(f"Критическая ошибка (попытка {attempt + 1}): {e}")
                 if attempt < max_retries - 1:
                     await asyncio.sleep(random.uniform(5, 10))
                     continue
                 return []
 
-            html = response.text
-
-            if len(html) < 500:
-                logging.warning(f"Слишком короткий ответ: {len(html)} байт")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(random.uniform(5, 10))
-                    continue
-                return []
-
-            soup = BeautifulSoup(html, 'lxml')
-            ads = []
-            cards = soup.find_all('div', class_='products-i')
-            
-            logging.info(f"Найдено {len(cards)} карточек объявлений")
-
-            for card in cards:
-                try:
-                    link_tag = card.find('a', class_='products-i__link')
-                    if not link_tag or 'href' not in link_tag.attrs:
-                        continue
-
-                    ad_url = 'https://turbo.az' + link_tag['href']
-                    ad_id = ad_url.split('/')[-1].split('?')[0]
-
-                    title_tag = card.find('div', class_='products-i__name')
-                    title = title_tag.text.strip() if title_tag else 'Без названия'
-
-                    price_tag = card.find('div', class_='product-price')
-                    price = price_tag.text.strip() if price_tag else 'Цена не указана'
-
-                    img_tag = card.find('img', class_='products-i__photo')
-                    img_url = ''
-                    if img_tag:
-                        img_url = img_tag.get('data-src') or img_tag.get('src', '')
-
-                    datetime_tag = card.find('div', class_='products-i__datetime')
-                    datetime_str = datetime_tag.text.strip() if datetime_tag else ''
-
-                    ads.append({
-                        'id': ad_id,
-                        'title': title,
-                        'price': price,
-                        'url': ad_url,
-                        'img': img_url,
-                        'city': datetime_str.split(',')[0] if ',' in datetime_str else '',
-                        'published_at': datetime_str.split(',')[1].strip() if ',' in datetime_str else datetime_str
-                    })
-                except Exception as e:
-                    logging.warning(f"Ошибка парсинга карточки: {e}")
-                    continue
-
-            logging.info(f"Успешно спарсено {len(ads)} объявлений")
-            return ads
-            
-        except requests.exceptions.Timeout:
-            logging.error(f"Timeout на попытке {attempt + 1}")
-            if attempt < max_retries - 1:
-                await asyncio.sleep(random.uniform(10, 15))
-                continue
-            return []
-            
-        except Exception as e:
-            logging.error(f"Критическая ошибка (попытка {attempt + 1}): {e}")
-            if attempt < max_retries - 1:
-                await asyncio.sleep(random.uniform(5, 10))
-                continue
-            return []
-    
-    return []
+        return []
 
 async def notify_admins(bot: Bot, message: str):
     async with Local_Session() as session:
