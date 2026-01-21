@@ -25,10 +25,9 @@ async def parse_page(url: str, max_retries: int = 3) -> list:
         logging.error("SCRAPING_API_KEY not set")
         return []
 
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-    ssl_context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1  # Принудительно использовать TLS 1.2+
+    # Используйте правильный SSL контекст с сертификатами
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+
     connector = aiohttp.TCPConnector(ssl=ssl_context)
     timeout = aiohttp.ClientTimeout(total=90)
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
